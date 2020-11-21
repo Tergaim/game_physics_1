@@ -15,7 +15,7 @@ void MassSpringSystemSimulator::initUI(DrawingUtilitiesClass * DUC){
 	// Switch between integrators
 	TwType integratorTypes;
 	integratorTypes = TwDefineEnum("integratorTypes", integrators, 3);
-	TwAddVarRW(DUC->g_pTweakBar, "Integration Method", integratorTypes, &integrator, NULL);
+	TwAddVarRW(DUC->g_pTweakBar, "Integration Method", integratorTypes, &m_iIntegrator, NULL);
 
 
 	if (test_case == 2) {
@@ -70,12 +70,12 @@ void MassSpringSystemSimulator::drawFrame(ID3D11DeviceContext* pd3dImmediateCont
 		DUC->endLine();
 	}
 
-	DUC->setUpLighting(Vec3(1,1,1), Vec3(1,1,1), 0.1, Vec3(1,1,1));
+	DUC->setUpLighting(Vec3(0.9,0.9,0.9), Vec3(0.9, 0.9, 0.9), 0.1, Vec3(0.9, 0.9, 0.9));
 	for (int i = 0; i < getNumberOfMassPoints(); i++) {
 		if (points[i].isFixed) {
 			DUC->setUpLighting(Vec3(1,0,0), Vec3(1,0,0), 0.1, Vec3(1, 0, 0));
 			DUC->drawSphere(points[i].position, 0.1);
-			DUC->setUpLighting(Vec3(1,1,1), Vec3(1,1,1), 0.1, Vec3(1, 1, 1));
+			DUC->setUpLighting(Vec3(0.9, 0.9, 0.9), Vec3(0.9, 0.9, 0.9), 0.1, Vec3(0.9, 0.9, 0.9));
 		}
 		else { DUC->drawSphere(points[i].position, 0.1); }
 	}
@@ -85,16 +85,31 @@ void MassSpringSystemSimulator::notifyCaseChanged(int testCase) {
 	std::cout << "Welcome to test case " << tests[test_case].Label << '!' << std::endl;
 	switch (testCase) {
 	case 0:
-		std::cout << "Click on the animation to perform an integration step. Feel free to change the integrator !" << std::endl;
+		demo_1();
 		break;
 	case 1:
 		break;
 	case 2:
-		std::cout << "Recommended parameters : \n\tGravity = 0.1\n\tWind = 2\n\tStiffness = 140" << std::endl;
+		std::cout << "Recommended parameters : \n\tGravity = 0.1\n\tWind = 1\n\tStiffness = 40\n\tTimestep = 0.1" << std::endl;
 		break;
 	default:
 		std::cout << "How did you even get there ?" << std::endl;
 	}
+}
+
+void MassSpringSystemSimulator::demo_1() {
+	setIntegrator(EULER);
+	reset();
+	eulerIntegrator(0.1);
+	std::cout << "Position and speed after last step with integrator " << integrators[m_iIntegrator].Label << std::endl;
+	for (int i = 0; i < getNumberOfMassPoints(); i++)
+		std::cout << "Point " << i << " : x(t) = " << points[i].position << " - v(t) = " << points[i].Velocity << std::endl;
+	setIntegrator(MIDPOINT);
+	reset();
+	midpointIntegrator(0.1);
+	std::cout << "Position and speed after last step with integrator " << integrators[m_iIntegrator].Label << std::endl;
+	for (int i = 0; i < getNumberOfMassPoints(); i++)
+		std::cout << "Point " << i << " : x(t) = " << points[i].position << " - v(t) = " << points[i].Velocity << std::endl;
 }
 
 void MassSpringSystemSimulator::externalForcesCalculations(float timeElapsed){
@@ -109,14 +124,13 @@ void MassSpringSystemSimulator::externalForcesCalculations(float timeElapsed){
 }
 
 void MassSpringSystemSimulator::simulateTimestep(float timeStep){
-	if (test_case == 0 && notOnCallback) return;
-	switch (integrator){
+	if (test_case == 0) return;
+	switch (m_iIntegrator){
 	case 0: // semi-implicit Euler
 		externalForcesCalculations(timeStep);
 		eulerIntegrator(timeStep);
 		break;
 	case 1: // LeapFrog
-		externalForcesCalculations(timeStep);
 		leapfrogIntegrator(timeStep);
 		break;
 	case 2: // Midpoint
@@ -126,12 +140,6 @@ void MassSpringSystemSimulator::simulateTimestep(float timeStep){
 		break;
 	}
 	collisionCheck();
-	if (test_case == 0) {
-		std::cout << "Position and speed after last step with integrator " << integrators[integrator].Label << std::endl;
-		for (int i = 0; i < getNumberOfMassPoints(); i++)
-			std::cout << "Point " << i << " : x(t) = " << points[i].position << " - v(t) = " << points[i].Velocity << std::endl;
-		notOnCallback = true;
-	}
 }
 
 void MassSpringSystemSimulator::collisionCheck(){
@@ -144,7 +152,7 @@ void MassSpringSystemSimulator::collisionCheck(){
 		}
 }
 
-void MassSpringSystemSimulator::onClick(int x, int y) { if (test_case == 0) { notOnCallback = false;  simulateTimestep(0.1); } }
+void MassSpringSystemSimulator::onClick(int x, int y) {}
 void MassSpringSystemSimulator::onMouse(int x, int y){}
 
 // Specific Functions
@@ -171,6 +179,7 @@ void MassSpringSystemSimulator::applyExternalForce(Vec3 force){}
 
 
 void MassSpringSystemSimulator::eulerIntegrator(float h){ // Implements semi-implicit Euler method
+
 	// 1. Update Velocity
 	for (int i = 0; i < getNumberOfSprings(); i++) {
 		MassPoint p1 = points[springs[i].p1];
@@ -250,6 +259,7 @@ void MassSpringSystemSimulator::midpointIntegrator(float h){
 
 void MassSpringSystemSimulator::leapfrogIntegrator(float h){
 	if (LeapfrogFirstStep) { // Compute v(t0 + h/2) with x(t0)
+		externalForcesCalculations(h/2);
 		for (int i = 0; i < getNumberOfSprings(); i++) {
 			MassPoint p1 = points[springs[i].p1];
 			MassPoint p2 = points[springs[i].p2];
@@ -273,6 +283,7 @@ void MassSpringSystemSimulator::leapfrogIntegrator(float h){
 		}
 
 		// Prepare next step : compute v(t + 3h/2)
+		externalForcesCalculations(h);
 		for (int i = 0; i < getNumberOfSprings(); i++) {
 			MassPoint p1 = points[springs[i].p1];
 			MassPoint p2 = points[springs[i].p2];

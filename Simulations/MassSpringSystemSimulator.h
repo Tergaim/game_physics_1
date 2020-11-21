@@ -62,18 +62,18 @@ private:
 	int previous_test_case = 0;
 	int test_case = 0;
 	int previous_integrator = 0;
-	int integrator = 0;
 	bool LeapfrogFirstStep = true;
 	void eulerIntegrator(float h);
 	void midpointIntegrator(float h);
 	void leapfrogIntegrator(float h);
+	void demo_1();
 
 
 	// Data Attributes
 	float m_fMass;
 	float m_fStiffness;
 	float m_fDamping;
-	int m_iIntegrator;
+	int m_iIntegrator = 0;
 	float gravity = 0;
 	float wind = 0;
 
@@ -85,7 +85,6 @@ private:
 	Point2D m_mouse;
 	Point2D m_trackmouse;
 	Point2D m_oldtrackmouse;
-	bool notOnCallback = true;
 	TwEnumVal tests[3] = { {0, "One-step"}, {1, "Simple Spring"}, {2, "Complex scene"} };
 	TwEnumVal integrators[3] = { {0, "Semi-implicit Euler"}, {1, "LeapFrog"}, {2, "Midpoint"} };
 };
