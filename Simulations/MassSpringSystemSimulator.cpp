@@ -4,6 +4,7 @@
 MassSpringSystemSimulator::MassSpringSystemSimulator(){
 	setMass(10);
 	setStiffness(40);
+	setDampingFactor(0.1);
 }
 
 // UI Functions
@@ -14,7 +15,7 @@ void MassSpringSystemSimulator::initUI(DrawingUtilitiesClass * DUC){
 
 	// Switch between integrators
 	TwType integratorTypes;
-	integratorTypes = TwDefineEnum("integratorTypes", integrators, 3);
+	integratorTypes = TwDefineEnum("integratorTypes", integrators, 4);
 	TwAddVarRW(DUC->g_pTweakBar, "Integration Method", integratorTypes, &m_iIntegrator, NULL);
 
 
@@ -22,6 +23,7 @@ void MassSpringSystemSimulator::initUI(DrawingUtilitiesClass * DUC){
 		TwAddVarRW(DUC->g_pTweakBar, "Gravity", TW_TYPE_FLOAT, &gravity, "min=0 max=10 step=0.1");
 		TwAddVarRW(DUC->g_pTweakBar, "Wind Force", TW_TYPE_FLOAT, &wind, "min=0 step=0.1");
 		TwAddVarRW(DUC->g_pTweakBar, "Spring stiffness", TW_TYPE_FLOAT, &m_fStiffness, "min=10 step=10");
+		TwAddVarRW(DUC->g_pTweakBar, "Damping", TW_TYPE_FLOAT, &m_fDamping, "min=0 max=1 step=0.1");
 	}
 }
 
@@ -90,7 +92,7 @@ void MassSpringSystemSimulator::notifyCaseChanged(int testCase) {
 	case 1:
 		break;
 	case 2:
-		std::cout << "Recommended parameters : \n\tGravity = 0.1\n\tWind = 1\n\tStiffness = 40\n\tTimestep = 0.1" << std::endl;
+		std::cout << "Recommended parameters : \n\tGravity = 0.1\n\tWind = 1\n\tStiffness = 40\n\tTimestep = 0.05" << std::endl;
 		break;
 	default:
 		std::cout << "How did you even get there ?" << std::endl;
@@ -120,13 +122,15 @@ void MassSpringSystemSimulator::externalForcesCalculations(float timeElapsed){
 		points[i].Velocity[1] += -timeElapsed * gravity;
 		// wind
 		points[i].Velocity[0] += timeElapsed * wind / m_fMass;
+		//Damping
+		points[i].Velocity *= (1 - m_fDamping);
 	}
 }
 
 void MassSpringSystemSimulator::simulateTimestep(float timeStep){
 	if (test_case == 0) return;
 	switch (m_iIntegrator){
-	case 0: // semi-implicit Euler
+	case 0: // explicit Euler
 		externalForcesCalculations(timeStep);
 		eulerIntegrator(timeStep);
 		break;
@@ -135,6 +139,9 @@ void MassSpringSystemSimulator::simulateTimestep(float timeStep){
 		break;
 	case 2: // Midpoint
 		midpointIntegrator(timeStep);
+		break;
+	case 3: // semi-implicit Euler
+		eulerImplicitIntegrator(timeStep);
 		break;
 	default:
 		break;
@@ -178,28 +185,32 @@ Vec3 MassSpringSystemSimulator::getVelocityOfMassPoint(int index){ return points
 void MassSpringSystemSimulator::applyExternalForce(Vec3 force){}
 
 
-void MassSpringSystemSimulator::eulerIntegrator(float h){ // Implements semi-implicit Euler method
+void MassSpringSystemSimulator::eulerIntegrator(float h){ // Implements explicit Euler method
+	// 1. Update Position, but save old one for velocity computation
+	vector<Vec3> step0positions;
+	for (int i = 0; i < getNumberOfMassPoints(); i++) {
+		step0positions.push_back(points[i].position);
+		if (!points[i].isFixed)
+			points[i].position = points[i].position + h * points[i].Velocity;
+	}
 
-	// 1. Update Velocity
+	// 2. Update Velocity
 	for (int i = 0; i < getNumberOfSprings(); i++) {
 		MassPoint p1 = points[springs[i].p1];
 		MassPoint p2 = points[springs[i].p2];
 		float il = springs[i].initial_length;
-		float l = sqrt(p1.position.squaredDistanceTo(p2.position));
-		float force = m_fStiffness * (l - il) / l;
+		float l = sqrt(step0positions[springs[i].p1].squaredDistanceTo(step0positions[springs[i].p2]));
+		Vec3 u = step0positions[springs[i].p1] - step0positions[springs[i].p2];
+		float force = m_fStiffness * (l - il) / m_fMass;
+		//std::cout << force << std::endl;
 		if (!p1.isFixed) {
-			p1.Velocity = p1.Velocity - h * force*(p1.position - p2.position) / m_fMass; 
+			p1.Velocity = p1.Velocity - h * force * u / l; 
 			points[springs[i].p1] = p1;
 		}
 		if (!p2.isFixed) {
-			p2.Velocity = p2.Velocity - h * force*(p2.position - p1.position) / m_fMass;
+			p2.Velocity = p2.Velocity + h * force * u / l;
 			points[springs[i].p2] = p2;
 		}
-	}
-	// 2. Update Position (after velocity since semi-implicit)
-	for (int i = 0; i < getNumberOfMassPoints(); i++) {
-		if (!points[i].isFixed)
-			points[i].position = points[i].position + h * points[i].Velocity;
 	}
 }
 
@@ -209,27 +220,27 @@ void MassSpringSystemSimulator::midpointIntegrator(float h){
 		step0positions.push_back(points[i].position);
 
 	// 1. Update Velocity & position, timeStep =  h/2
-	externalForcesCalculations(h / 2);
-	for (int i = 0; i < getNumberOfSprings(); i++) {
-		MassPoint p1 = points[springs[i].p1];
-		MassPoint p2 = points[springs[i].p2];
-		float il = springs[i].initial_length;
-		float l = sqrt(p1.position.squaredDistanceTo(p2.position));
-		float force = m_fStiffness * (l - il) / l;
-		if (!p1.isFixed) {
-			p1.Velocity = p1.Velocity - 0.5 * h * force*(p1.position - p2.position) / m_fMass;
-			points[springs[i].p1] = p1;
-		}
-		if (!p2.isFixed) {
-			p2.Velocity = p2.Velocity - 0.5 * h * force*(p2.position - p1.position) / m_fMass;
-			points[springs[i].p2] = p2;
-		}
-
-	}
-
 	for (int i = 0; i < getNumberOfMassPoints(); i++) {
 		if (!points[i].isFixed)
 			points[i].position = points[i].position + 0.5 * h * points[i].Velocity;
+	}
+
+	externalForcesCalculations(h / 2);
+	for (int i = 0; i < getNumberOfSprings(); i++) {
+		MassPoint p1 = MassPoint(points[springs[i].p1]);
+		MassPoint p2 = MassPoint(points[springs[i].p2]);
+		float il = springs[i].initial_length;
+		float l = sqrt(p1.position.squaredDistanceTo(p2.position));
+		float force = m_fStiffness * (l - il) / m_fMass;
+		if (!p1.isFixed) {
+			p1.Velocity = p1.Velocity - 0.5 * h * force*(p1.position - p2.position) / l;
+			points[springs[i].p1] = p1;
+		}
+		if (!p2.isFixed) {
+			p2.Velocity = p2.Velocity - 0.5 * h * force*(p2.position - p1.position) / l;
+			points[springs[i].p2] = p2;
+		}
+
 	}
 
 	// 2. Compute final velocity using intermediate position
@@ -239,13 +250,13 @@ void MassSpringSystemSimulator::midpointIntegrator(float h){
 		MassPoint p2 = points[springs[i].p2];
 		float il = springs[i].initial_length;
 		float l = sqrt(p1.position.squaredDistanceTo(p2.position));
-		float force = m_fStiffness * (l - il) / l;
+		float force = m_fStiffness * (l - il) / m_fMass;
 		if (!p1.isFixed) {
-			p1.Velocity = p1.Velocity - h * force*(p1.position - p2.position) / m_fMass;
+			p1.Velocity = p1.Velocity - h * force*(p1.position - p2.position) / l;
 			points[springs[i].p1] = p1;
 		}
 		if (!p2.isFixed) {
-			p2.Velocity = p2.Velocity - h * force*(p2.position - p1.position) / m_fMass;
+			p2.Velocity = p2.Velocity - h * force*(p2.position - p1.position) / l;
 			points[springs[i].p2] = p2;
 		}
 	}
@@ -265,13 +276,13 @@ void MassSpringSystemSimulator::leapfrogIntegrator(float h){
 			MassPoint p2 = points[springs[i].p2];
 			float il = springs[i].initial_length;
 			float l = sqrt(p1.position.squaredDistanceTo(p2.position));
-			float force = m_fStiffness * (l - il) / l;
+			float force = m_fStiffness * (l - il) / m_fMass;
 			if (!p1.isFixed) {
-				p1.Velocity = p1.Velocity - 0.5 * h * force*(p1.position - p2.position) / m_fMass;
+				p1.Velocity = p1.Velocity - 0.5 * h * force*(p1.position - p2.position) / l;
 				points[springs[i].p1] = p1;
 			}
 			if (!p2.isFixed) {
-				p2.Velocity = p2.Velocity - 0.5 * h * force*(p2.position - p1.position) / m_fMass;
+				p2.Velocity = p2.Velocity - 0.5 * h * force*(p2.position - p1.position) / l;
 				points[springs[i].p2] = p2;
 			}
 		}
@@ -289,15 +300,40 @@ void MassSpringSystemSimulator::leapfrogIntegrator(float h){
 			MassPoint p2 = points[springs[i].p2];
 			float il = springs[i].initial_length;
 			float l = sqrt(p1.position.squaredDistanceTo(p2.position));
-			float force = m_fStiffness * (l - il) / l;
+			float force = m_fStiffness * (l - il) / m_fMass;
 			if (!p1.isFixed) {
-				p1.Velocity = p1.Velocity - h * force*(p1.position - p2.position) / m_fMass;
+				p1.Velocity = p1.Velocity - h * force*(p1.position - p2.position) / l;
 				points[springs[i].p1] = p1;
 			}
 			if (!p2.isFixed) {
-				p2.Velocity = p2.Velocity - h * force*(p2.position - p1.position) / m_fMass;
+				p2.Velocity = p2.Velocity - h * force*(p2.position - p1.position) / l;
 				points[springs[i].p2] = p2;
 			}
 		}
+	}
+}
+
+void MassSpringSystemSimulator::eulerImplicitIntegrator(float h) { // Implements semi-implicit Euler method
+
+	// 1. Update Velocity
+	for (int i = 0; i < getNumberOfSprings(); i++) {
+		MassPoint p1 = points[springs[i].p1];
+		MassPoint p2 = points[springs[i].p2];
+		float il = springs[i].initial_length;
+		float l = sqrt(p1.position.squaredDistanceTo(p2.position));
+		float force = m_fStiffness * (l - il) / m_fMass;
+		if (!p1.isFixed) {
+			p1.Velocity = p1.Velocity - h * force*(p1.position - p2.position) / l;
+			points[springs[i].p1] = p1;
+		}
+		if (!p2.isFixed) {
+			p2.Velocity = p2.Velocity - h * force*(p2.position - p1.position) / l;
+			points[springs[i].p2] = p2;
+		}
+	}
+	// 2. Update Position (after velocity since semi-implicit)
+	for (int i = 0; i < getNumberOfMassPoints(); i++) {
+		if (!points[i].isFixed)
+			points[i].position = points[i].position + h * points[i].Velocity;
 	}
 }
