@@ -57,11 +57,10 @@ void MassSpringSystemSimulator::reset(){
 }
 
 void MassSpringSystemSimulator::drawFrame(ID3D11DeviceContext* pd3dImmediateContext){
-	if (previous_test_case != test_case) {// test case changed
+	if (previous_integrator != m_iIntegrator) {// test case changed
 		// clear old setup and build up new setup
-		notifyCaseChanged(test_case);
-		previous_test_case = test_case;
-		reset();
+		std::cout << "Now using integrator " << integrators[m_iIntegrator].Label << std::endl;
+		previous_integrator = m_iIntegrator;
 	}
 
 	for (int i = 0; i < getNumberOfSprings(); i++) {
@@ -70,18 +69,19 @@ void MassSpringSystemSimulator::drawFrame(ID3D11DeviceContext* pd3dImmediateCont
 		DUC->endLine();
 	}
 
-	DUC->setUpLighting(Vec3(0.9,0.9,0.9), Vec3(0.9, 0.9, 0.9), 0.1, Vec3(0.9, 0.9, 0.9));
+	DUC->setUpLighting(Vec3(0.5, 0.5, 0.5), Vec3(0.5, 0.5, 0.5), 0.1, Vec3(0.5, 0.5, 0.5));
 	for (int i = 0; i < getNumberOfMassPoints(); i++) {
 		if (points[i].isFixed) {
 			DUC->setUpLighting(Vec3(1,0,0), Vec3(1,0,0), 0.1, Vec3(1, 0, 0));
 			DUC->drawSphere(points[i].position, 0.1);
-			DUC->setUpLighting(Vec3(0.9, 0.9, 0.9), Vec3(0.9, 0.9, 0.9), 0.1, Vec3(0.9, 0.9, 0.9));
+			DUC->setUpLighting(Vec3(0.5, 0.5, 0.5), Vec3(0.5, 0.5, 0.5), 0.1, Vec3(0.5, 0.5, 0.5));
 		}
-		else { DUC->drawSphere(points[i].position, 0.1); }
+		else { DUC->drawSphere(points[i].position, 0.05); }
 	}
 }
 void MassSpringSystemSimulator::notifyCaseChanged(int testCase) {
 	test_case = testCase;
+	reset();
 	std::cout << "Welcome to test case " << tests[test_case].Label << '!' << std::endl;
 	switch (testCase) {
 	case 0:
@@ -146,8 +146,8 @@ void MassSpringSystemSimulator::collisionCheck(){
 	if (test_case < 2) return;
 
 	for(int i = 0; i < getNumberOfMassPoints(); i++)
-		if (points[i].position[1] < -0.9) {
-			points[i].position[1] = -0.9;
+		if (points[i].position[1] < -0.95) {
+			points[i].position[1] = -0.95;
 			points[i].Velocity[1] = 0;
 		}
 }
