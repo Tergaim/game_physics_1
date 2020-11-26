@@ -6,6 +6,7 @@
 #define EULER 0
 #define LEAPFROG 1
 #define MIDPOINT 2
+#define EULERIMPLICIT 3
 // Do Not Change
 
 struct MassPoint {
@@ -59,11 +60,12 @@ public:
 
 private:
 	// Test Cases
-	int previous_test_case = 0;
 	int test_case = 0;
 	int previous_integrator = 0;
+	int m_iIntegrator = 0;
 	bool LeapfrogFirstStep = true;
 	void eulerIntegrator(float h);
+	void eulerImplicitIntegrator(float h);
 	void midpointIntegrator(float h);
 	void leapfrogIntegrator(float h);
 	void demo_1();
@@ -73,7 +75,6 @@ private:
 	float m_fMass;
 	float m_fStiffness;
 	float m_fDamping;
-	int m_iIntegrator = 0;
 	float gravity = 0;
 	float wind = 0;
 
@@ -86,6 +87,6 @@ private:
 	Point2D m_trackmouse;
 	Point2D m_oldtrackmouse;
 	TwEnumVal tests[3] = { {0, "One-step"}, {1, "Simple Spring"}, {2, "Complex scene"} };
-	TwEnumVal integrators[3] = { {0, "Semi-implicit Euler"}, {1, "LeapFrog"}, {2, "Midpoint"} };
+	TwEnumVal integrators[4] = { {0, "Explicit Euler"}, {1, "LeapFrog"}, {2, "Midpoint"}, {3, "Semi-implicit Euler"} };
 };
 #endif
